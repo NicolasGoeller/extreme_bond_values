@@ -49,14 +49,22 @@ setcolorder(gov_bonds, c("ref_area","obs_time",paste0("SR_",mat)))
 # Calculate daily bond returns from prices
 returns <- copy(gov_bonds)
 returns <- returns[, c(3:13) := log(.SD / shift(.SD)), .SDcols = c(3:13)]
+returns <- na.omit(returns)
 
 library(ggplot2)
-
-# Read baseline paper to do basic replication
+library(modelsummary)
 
 # Produce summary stats tables
 
+test <- returns %>% 
+  select(-ref_area, -obs_time)
+
+Skew <- function(x){skewness(x)}
+Kurt <- function(x){kurtosis(x)}
+
+datasummary(All(test)~Mean+SD+Median+Min+Max+Skew+Kurt, data=test)
+
 # Run basic EVA analysis on 2 series
 
-ggplot(data = test, aes(x = SR_3M)) +
-  geom_density()
+ggplot(data = test, aes(x=obs_time,y=SR_5Y)) +
+  geom_point()
