@@ -1,5 +1,9 @@
-library(ecb)
 library(data.table)
+library(ecb)
+
+library(ismev)
+library(evir)
+library(stringr)
 
 # Define base SDW key for EA triple-A gov bonds
 base_key <- "YC.B.U2.EUR.4F.G_N_A.SV_C_YM.SR_"
@@ -21,20 +25,38 @@ for (m in mat){
 gov_bonds <- do.call(rbind, bond_list)
 
 # Modify important indicator columns
-gov_bonds$maturity <- substr(gov_bonds$data_type_fm,4,stop=10)
 gov_bonds$ref_area <- ifelse(gov_bonds$provider_fm == "4F","EA",gov_bonds$provider_fm)
-gov_bonds$obs_time<- as.Date(gov_bonds$obstime, format = "%Y-%m-%d")
+gov_bonds$obstime<- as.Date(gov_bonds$obstime, format = "%Y-%m-%d")
+
+# Rename columns appropriately
+setnames(gov_bonds, old = c("data_type_fm","obsvalue","obstime"), 
+         new = c("maturity", "spot_rate", "obs_time"))
 
 # Keep only relevant columns
-gov_bonds <- gov_bonds[,c("ref_area","maturity","obs_time","obsvalue")]
+gov_bonds$ttm <- as.numeric(str_extract(gov_bonds$maturity,"[0-9]+"))
+gov_bonds$mat_unit <- str_extract(gov_bonds$maturity,"[M,Y]{1}")
+gov_bonds[mat_unit == "M", ttm := ttm * 1/12]
+gov_bonds <- gov_bonds[,c("ref_area","maturity","ttm","obs_time","spot_rate")]
+
+# Calculate daily bond prices from spot rates
+#gov_bonds$price <- 100*exp(-gov_bonds$spot_rate * gov_bonds$ttm)
+gov_bonds$price <- 100*(1+gov_bonds$spot_rate)^(-gov_bonds$ttm)
 
 # Cast into wide form to get individual time series
-gov_bonds <- dcast(gov_bonds, ref_area+obs_time~maturity, value.var = "obsvalue")
-setcolorder(gov_bonds, c("ref_area","obs_time",mat))
+gov_bonds <- dcast(gov_bonds, ref_area+obs_time~maturity, value.var = "price")
+setcolorder(gov_bonds, c("ref_area","obs_time",paste0("SR_",mat)))
 
-# Compute daily price changes
-test <- gov_bonds[, c(3:13) := .SD - shift(.SD), .SDcols = c(3:13)]
+# Calculate daily bond returns from prices
+returns <- copy(gov_bonds)
+returns <- returns[, c(3:13) := log(.SD / shift(.SD)), .SDcols = c(3:13)]
 
-# Create alternative dataset of log changes
-#test_log <- test[, c(3:13) := lapply(.SD,log), .SDcols = c(3:13)]
+library(ggplot2)
 
+# Read baseline paper to do basic replication
+
+# Produce summary stats tables
+
+# Run basic EVA analysis on 2 series
+
+ggplot(data = test, aes(x = SR_3M)) +
+  geom_density()
